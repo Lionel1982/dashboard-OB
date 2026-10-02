@@ -22,15 +22,44 @@ if "_cache_db_init" not in st.session_state:
     db_cache.init_db()
     st.session_state["_cache_db_init"] = True
 
-config = load_config()
-if not config:
-    st.stop()
+import clients_config as cc
 
-base_url = config["endpoint"].rstrip("/")
-username = config["username"]
-password = config["password"]
-client_name = config.get("client", DEFAULT_CLIENT)
-store_list = config.get("stores", DEFAULT_STORES)
+# ---- Multi-client : charge la liste des clients (migre config.json si besoin) ----
+_clients = st.session_state.get("clients_data") or cc.load_clients()
+st.session_state["clients_data"] = _clients
+_client_names = cc.list_client_names(_clients)
+
+# Selecteur de client en HAUT de la sidebar (avant tout le reste).
+if _client_names:
+    _active = cc.get_active_client_name(_clients)
+    _idx = _client_names.index(_active) if _active in _client_names else 0
+    _chosen = st.sidebar.selectbox("\U0001f3e2 " + t("cfg_select_client", "fr"),
+                                   _client_names, index=_idx, key="client_selector")
+    if _chosen != _active:
+        _clients = cc.set_active_client(_clients, _chosen)
+        st.session_state["clients_data"] = _clients
+    _cfg = cc.get_client(_clients, _chosen)
+else:
+    # Aucun client : fallback sur l'ancienne config (st.secrets / config.json)
+    _cfg = None
+
+# Fallback retrocompatible si pas de multi-client configure
+if _cfg:
+    base_url = _cfg["endpoint"]
+    username = _cfg["username"]
+    PW_VALUE = _cfg["password"]
+    client_name = _cfg["name"]
+    store_list = _cfg["stores"] or DEFAULT_STORES
+else:
+    config = load_config()
+    if not config:
+        st.info("Aucun client configure. Ouvrez l'onglet Configuration pour en ajouter un.")
+        st.stop()
+    base_url = config["endpoint"].rstrip("/")
+    username = config["username"]
+    PW_VALUE = config["password"]
+    client_name = config.get("client", DEFAULT_CLIENT)
+    store_list = config.get("stores", DEFAULT_STORES)
 
 # ==========================================
 # SIDEBAR
@@ -39,6 +68,7 @@ store_list = config.get("stores", DEFAULT_STORES)
 lang_label = st.sidebar.selectbox("\U0001f310 " + t("language", "fr") + " / Language",
                                   list(LANGUAGES.keys()), index=0)
 lang = LANGUAGES[lang_label]
+st.session_state["_lang"] = lang  # pour load_tab_data (bouton Charger traduit)
 
 st.sidebar.caption(f"{t('client_api', lang)} : **{client_name}**")
 st.sidebar.divider()
@@ -61,7 +91,7 @@ if is_persist_log():
 
 st.title("\U0001f4ca " + t("app_title", lang))
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "\U0001f4b6 " + t("tabs_takings", lang),
     "\U0001f465 " + t("tabs_clients", lang),
     "\U0001f381 " + t("tabs_giftcards", lang),
@@ -71,13 +101,14 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "\U0001f4b0 " + t("tabs_cashdesks", lang),
     "\U0001f4c8 " + t("tabs_trends", lang),
     "\U0001f9d1\u200d\U0001f4bc " + t("tabs_sellers", lang),
-    "\U0001f9ee " + t("tabs_promo_sim", lang)])
+    "\U0001f9ee " + t("tabs_promo_sim", lang),
+    "\u2699\ufe0f " + t("tabs_config", lang)])
 
 # Onglet 1
 from tab_encaissements import render_encaissements
 with tab1:
     render_encaissements(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
         amount_type=amount_type, split_pos_neg=split_pos_neg,
         selected_bucket=selected_bucket, freq=freq, lang=lang,
@@ -87,7 +118,7 @@ with tab1:
 from tab_clients import render_clients
 with tab2:
     render_clients(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         client_name=client_name, selected_store=selected_store,
         selected_date=selected_date, amount_type=amount_type, lang=lang,
     )
@@ -97,7 +128,7 @@ with tab2:
 from tab_giftcards import render_giftcards
 with tab3:
     render_giftcards(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_date=selected_date, lang=lang,
     )
 
@@ -106,7 +137,7 @@ with tab3:
 from tab_promotions import render_promotions
 with tab4:
     render_promotions(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date, lang=lang,
     )
 
@@ -114,7 +145,7 @@ with tab4:
 from tab_coupons import render_coupons
 with tab5:
     render_coupons(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_date=selected_date, lang=lang,
     )
 
@@ -123,7 +154,7 @@ with tab5:
 from tab_products import render_products
 with tab6:
     render_products(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date, lang=lang,
     )
 
@@ -131,7 +162,7 @@ with tab6:
 from tab_cashdesks import render_cashdesks
 with tab7:
     render_cashdesks(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date, lang=lang,
     )
 
@@ -139,7 +170,7 @@ with tab7:
 from tab_trends import render_trends
 with tab8:
     render_trends(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
         amount_type=amount_type, lang=lang,
     )
@@ -148,7 +179,7 @@ with tab8:
 from tab_sellers import render_sellers
 with tab9:
     render_sellers(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
         amount_type=amount_type, lang=lang,
     )
@@ -157,10 +188,16 @@ with tab9:
 from tab_promo_simulator import render_promo_simulator
 with tab10:
     render_promo_simulator(
-        base_url=base_url, username=username, password=password,
+        base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
-        config=config, lang=lang,
+        config=(_cfg or {}), lang=lang,
     )
+
+# Onglet 11 - Configuration (multi-client / multi-magasin)
+from tab_config import render_config
+with tab11:
+    render_config(lang=lang)
+
 
 # ==========================================
 # PANNEAU DIAGNOSTIC DU CACHE (sidebar)

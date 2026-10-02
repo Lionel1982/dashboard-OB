@@ -5,6 +5,7 @@ import plotly.express as px
 from datetime import timedelta
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_orders, parse_orders_sellers, compute_seller_stats, df_to_csv_bytes,
 )
@@ -38,6 +39,8 @@ def render_sellers(*, base_url, username, password, selected_store,
         cache_key,
         lambda: fetch_orders(base_url, username, password, selected_store, date_str),
         t("sellers_analysis", lang), force=force)
+    if raw is NOT_LOADED:
+        return
 
     if not raw:
         st.warning(t("sellers_no_data", lang).format(

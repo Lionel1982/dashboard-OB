@@ -4,6 +4,7 @@ import json
 import plotly.express as px
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_orders, parse_orders, compute_order_stats,
     fetch_all_business_partners, parse_business_partners,
@@ -49,6 +50,8 @@ def render_clients(*, base_url, username, password, client_name,
         }
     cached = load_tab_data(cache_key, _load, t("spinner_clients", lang), force=force,
                            db_keys=["business_partners"])
+    if cached is NOT_LOADED:
+        return
     raw_all_bps = cached["bps"]
     raw_today_subs = cached["today_subs"]
     raw_range_subs = cached["range_subs"]

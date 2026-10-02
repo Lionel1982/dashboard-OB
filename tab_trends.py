@@ -2,6 +2,7 @@
 import streamlit as st
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     build_trend_series, generate_trend_chart, generate_dow_chart,
 )
@@ -22,6 +23,8 @@ def render_trends(*, base_url, username, password, selected_store,
         lambda: build_trend_series(base_url, username, password,
                                    selected_store, selected_date, n_days=14),
         t("trend_loading", lang))
+    if df_trend is NOT_LOADED:
+        return
 
     if df_trend.empty or df_trend[amount_col].sum() == 0:
         st.info(t("prod_no_data", lang))

@@ -3,6 +3,7 @@ import streamlit as st
 import json
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_orders, parse_daily_products, compute_products_summary,
     generate_top_products_chart, generate_category_chart, df_to_csv_bytes,
@@ -30,6 +31,8 @@ def render_products(*, base_url, username, password, selected_store,
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary", key="btn_refresh_prod")
 
     raw = load_tab_data(cache_key, lambda: fetch_orders(base_url, username, password, selected_store, date_str), t("prod_analysis", lang), force=force)
+    if raw is NOT_LOADED:
+        return
 
     df_prod = parse_daily_products(json.dumps(raw))
     if df_prod.empty:

@@ -14,6 +14,7 @@ import logging
 
 from geo_data import get_region_info
 import db_cache
+from i18n import t  # import module-level (utilise par load_tab_data)
 
 logger = logging.getLogger("dashboard")
 
@@ -38,8 +39,15 @@ _DF_HASH = {pd.DataFrame: _hash_df}
 # ==========================================
 # CHARGEMENT MUTUALISE + GROS INDICATEUR
 # ==========================================
+#: Sentinelle renvoye par load_tab_data quand l'onglet n'a pas encore ete
+#: charge (chargement paresseux a la demande). L'appelant DOIT faire un early
+#: return des qu'il recoit cette valeur.
+NOT_LOADED = object()
+
+
 def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
-                  db_keys: list = None):
+                  db_keys: list = None, require_click: bool = True,
+                  load_label: str = None):
     """Charge des donnees pour un onglet avec cache session + GROS indicateur.
 
     - cache_key : cle unique en st.session_state (persiste entre navigations).
@@ -48,10 +56,20 @@ def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
                   reseau reel n'a lieu qu'une fois par (params, TTL)).
     - label     : texte affiche dans le gros indicateur de chargement.
     - force     : recharge meme si deja en cache (bouton Rafraichir).
+    - require_click : si True (defaut), l'onglet NE charge RIEN tant que
+                  l'utilisateur n'a pas clique sur le bouton 'Charger'. Evite
+                  que les 10 onglets st.tabs chargent tous au demarrage (les
+                  st.tabs ne sont pas paresseux : leur code s'execute a chaque
+                  run). Renvoie la sentinelle NOT_LOADED tant qu'aucun clic.
+    - load_label : libelle du bouton 'Charger' (defaut : traduction 'load_data').
 
-    Le chargement paresseux : on ne recharge PAS si la cle est deja en session,
+    Chargement paresseux : on ne recharge PAS si la cle est deja en session,
     ce qui rend la navigation entre onglets instantanee.
     """
+    # Marqueur "deja charge au moins une fois" (persiste tant que l'onglet
+    # reste en session). Le force (Rafraichir) ne reinitialise pas ce marqueur.
+    loaded_flag = f"{cache_key}__loaded"
+
     if force:
         if cache_key in st.session_state:
             del st.session_state[cache_key]
@@ -63,7 +81,21 @@ def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
                 db_cache.delete(_k)
             except Exception:
                 pass
+
+    # --- Chargement paresseux a la demande : bouton 'Charger' ---
+    if require_click and loaded_flag not in st.session_state and cache_key not in st.session_state:
+        _lang = st.session_state.get("_lang", "fr")
+        btn_label = load_label or t("load_data", _lang)
+        if st.button("\U0001f4e5 " + btn_label, type="primary",
+                     key=f"load_btn_{cache_key}"):
+            st.session_state[loaded_flag] = True
+            # on continue le chargement ci-dessous (pas de return)
+        else:
+            st.caption(t("load_hint", _lang))
+            return NOT_LOADED
+
     if cache_key not in st.session_state:
+        st.session_state[loaded_flag] = True
         with st.status(f"⏳ {label}", expanded=True) as status:
             st.write(f"**{label}**")
             data = loader()
@@ -266,6 +298,66 @@ def fetch_orders(base_url, username, password, store_name, order_date):
         frozen=db_cache.is_frozen_single(order_date),
         label=f"orders {store_name} {order_date}",
     )
+
+
+def fetch_order_by_document_no(base_url, username, password, document_no):
+    """Recupere UN ticket par son numero (endpoint Order/byDocumentNo).
+
+    Pas besoin de date : le numero de document est unique. Un ticket passe est
+    immuable -> cache DB fige en permanence (cle par documentNo). Renvoie la
+    liste brute (0 ou 1+ orders) telle que l'API la fournit.
+    """
+    doc = (document_no or "").strip()
+    cache_key = f"order_doc|{doc}"
+    endpoint = f"{base_url}/org.openbravo.api.ExportService/Order/byDocumentNo"
+    return db_cache.fetch_with_cache(
+        cache_key,
+        lambda: _fetch_paginated(
+            endpoint, {"documentNo": doc},
+            username, password, label=f"order_doc_{doc}"),
+        frozen=True,
+        label=f"order byDocumentNo {doc}",
+    )
+
+
+def fetch_organizations(base_url, username, password, client_name=""):
+    """Recupere les ORGANISATIONS (magasins) d'un client via l'endpoint
+    Organization (Master Data API). Base globale non datable -> cache DB a TTL
+    long (24h), par client (la cle inclut le nom du client). Un seul chargement
+    par jour, mutualise ; le bouton Rafraichir (parametrage) force le rechargement.
+    """
+    cache_key = f"organizations|{client_name or base_url}"
+    endpoint = f"{base_url}/org.openbravo.api.ExportService/Organization"
+    return db_cache.fetch_with_cache(
+        cache_key,
+        lambda: _fetch_paginated(endpoint, {}, username, password,
+                                 label=f"organizations_{client_name}"),
+        frozen=False,
+        label=f"organizations {client_name} (TTL 24h)",
+        ttl_seconds=86400,
+    )
+
+
+def parse_organizations(orgs_json: str) -> list:
+    """Extrait la liste des magasins (name) exploitables depuis la reponse
+    Organization. Ignore les organisations techniques (sans searchKey/name, ou
+    marquees comme non-magasin). Renvoie une liste de noms triee, dedupliquee.
+
+    On garde large : toute org ayant un 'name' non vide est candidate. Les
+    installs Openbravo exposent typiquement l'org racine + les magasins ; on
+    renvoie tout 'name' non vide, a l'utilisateur de choisir dans le selecteur.
+    """
+    try:
+        orgs = json.loads(orgs_json)
+    except Exception:
+        orgs = []
+    names = []
+    for o in orgs or []:
+        nm = (o.get("name") or "").strip()
+        if nm:
+            names.append(nm)
+    # dedupe en conservant un tri alphabetique stable
+    return sorted(set(names))
 
 
 def _extract_bp_name(order: dict) -> str:
@@ -1744,6 +1836,73 @@ def parse_daily_promotions(orders_json: str) -> pd.DataFrame:
                     "discount_id": promo.get("discountId", "") or promo.get("searchKey", ""),
                 })
     return pd.DataFrame(records)
+
+
+def per_ticket_promo_summary(orders_json: str) -> dict:
+    """Agrege, PAR ticket (documentNo), les promos et coupons appliques.
+
+    Lit OrderLine.promotions[] (0 appel API). Sert a afficher dans la liste des
+    tickets du jour une icone promo (si >=1 promo) et une icone coupon (si >=1
+    couponCode), avec le detail pour le tooltip.
+
+    Renvoie { documentNo: {
+        "has_promo": bool, "has_coupon": bool,
+        "n_promos": int, "remise_totale": float,
+        "promos": [ {name, type, amount} ... ],
+        "coupons": [ code, ... ],
+        "promo_tooltip": str, "coupon_tooltip": str,
+    } }
+    """
+    try:
+        orders = json.loads(orders_json)
+    except Exception:
+        orders = []
+    out = {}
+    for o in orders or []:
+        if o.get("isCancelled") or o.get("isVoid"):
+            continue
+        doc = o.get("documentNo", "N/A")
+        dt = o.get("localCreationDate") or o.get("creationDate") or ""
+        gross = abs(float(o.get("grossAmount", 0) or 0))
+        promos, coupons, remise = [], [], 0.0
+        for line in o.get("lines", []) or []:
+            for promo in line.get("promotions", []) or []:
+                nm = (promo.get("name", "") or promo.get("identifier", "")
+                      or promo.get("searchKey", "") or "Inconnu")
+                amt = abs(float(promo.get("totalAmount", 0) or 0))
+                remise += amt
+                promos.append({"name": nm,
+                               "type": promo.get("discountType", ""),
+                               "amount": amt})
+                cc = promo.get("couponCode", "") or ""
+                if cc:
+                    coupons.append(cc)
+        if not promos and not coupons:
+            # ticket sans promo : on l'enregistre quand meme (icones vides)
+            out[doc] = {"has_promo": False, "has_coupon": False, "n_promos": 0,
+                        "remise_totale": 0.0, "promos": [], "coupons": [],
+                        "promo_tooltip": "", "coupon_tooltip": "",
+                        "datetime": dt, "gross": gross}
+            continue
+        # Tooltips : lignes "nom : montant" / liste des codes (dedupliques)
+        uniq_coupons = sorted(set(coupons))
+        promo_tt = " | ".join(
+            f"{pr['name']} : {pr['amount']:.2f} EUR" if pr["amount"] else pr["name"]
+            for pr in promos)
+        coupon_tt = " | ".join(uniq_coupons)
+        out[doc] = {
+            "has_promo": len(promos) > 0,
+            "has_coupon": len(uniq_coupons) > 0,
+            "n_promos": len(promos),
+            "remise_totale": round(remise, 2),
+            "promos": promos,
+            "coupons": uniq_coupons,
+            "promo_tooltip": promo_tt,
+            "coupon_tooltip": coupon_tt,
+            "datetime": dt,
+            "gross": gross,
+        }
+    return out
 
 
 def compute_promotions_summary(df_promo: pd.DataFrame) -> dict:

@@ -2,6 +2,7 @@
 #  SECRETS — NE JAMAIS COMMITER
 # ============================================
 config.json
+clients_config.json
 compta_config.json
 .streamlit/secrets.toml
 

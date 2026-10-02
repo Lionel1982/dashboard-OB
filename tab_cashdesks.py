@@ -5,6 +5,7 @@ import plotly.express as px
 from datetime import timedelta, date as _date
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_cashups, fetch_cashups_by_org_date, parse_cashups, compute_cashup_stats,
     fetch_orders, analyze_cashup_gap,
@@ -202,6 +203,8 @@ def render_cashdesks(*, base_url, username, password, selected_store, selected_d
         lambda: fetch_cashups_by_org_date(base_url, username, password,
                                           selected_store, date_str),
         t("cash_analysis", lang), force=force)
+    if raw is NOT_LOADED:
+        return
 
     df_cu = parse_cashups(json.dumps(raw), date_str)
     if df_cu.empty:

@@ -9,6 +9,7 @@ import io
 import zipfile
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_orders, parse_orders, compute_order_stats,
     generate_hourly_chart, generate_payment_pie,
@@ -43,6 +44,8 @@ def render_encaissements(*, base_url, username, password, selected_store,
         cache_key,
         lambda: fetch_orders(base_url, username, password, selected_store, date_str),
         t("tabs_takings", lang), force=force)
+    if raw_orders is NOT_LOADED:
+        return
 
     if not raw_orders:
         st.warning(t("no_orders_day", lang).format(d=selected_date.strftime("%d/%m/%Y"), s=selected_store))

@@ -3,6 +3,7 @@ import streamlit as st
 import json
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_coupons, parse_coupons, compute_coupons_stats,
     compute_coupons_by_promo, df_to_csv_bytes,
@@ -30,6 +31,8 @@ def render_coupons(*, base_url, username, password, selected_date, lang="fr"):
 
     raw = load_tab_data(cache_key, lambda: fetch_coupons(base_url, username, password),
                         t("coupon_analysis", lang), force=force, db_keys=["coupons"])
+    if raw is NOT_LOADED:
+        return
 
     df_c = parse_coupons(json.dumps(raw))
     if df_c.empty:

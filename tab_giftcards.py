@@ -4,6 +4,7 @@ import json
 import pandas as pd
 
 from utils import (
+    NOT_LOADED,
     load_tab_data,
     fetch_gift_cards, fetch_gift_card_transactions,
     parse_gift_cards, parse_gift_card_transactions,
@@ -38,6 +39,8 @@ def render_giftcards(*, base_url, username, password, selected_date, lang="fr"):
                 "txn": fetch_gift_card_transactions(base_url, username, password)}
     cached = load_tab_data(cache_key, _load, t("gc_analysis", lang), force=force,
                            db_keys=["gift_cards", "gift_card_transactions"])
+    if cached is NOT_LOADED:
+        return
     raw_gc, raw_txn = cached["gc"], cached["txn"]
 
     df_gc = parse_gift_cards(json.dumps(raw_gc))
