@@ -374,6 +374,93 @@ def parse_organizations(orgs_json: str) -> list:
     return sorted(set(names))
 
 
+def fetch_product_categories(base_url, username, password, client_name=""):
+    """Recupere les categories de produits (ProductCategory, Master Data API).
+    Base globale non datable -> cache DB TTL long (24h), par client. Sert a
+    peupler le menu deroulant de l'onglet Creation de produit.
+    """
+    cache_key = f"product_categories|{client_name or base_url}"
+    endpoint = f"{base_url}/org.openbravo.api.ExportService/ProductCategory"
+    return db_cache.fetch_with_cache(
+        cache_key,
+        lambda: _fetch_paginated(endpoint, {}, username, password,
+                                 label=f"product_categories_{client_name}"),
+        frozen=False,
+        label=f"product_categories {client_name} (TTL 24h)",
+        ttl_seconds=86400,
+    )
+
+
+def parse_product_categories(cats_json: str) -> list:
+    """Renvoie [(searchKey, name)] des categories actives, triees par nom."""
+    try:
+        cats = json.loads(cats_json)
+    except Exception:
+        cats = []
+    out = []
+    for c in cats or []:
+        sk = (c.get("searchKey") or "").strip()
+        nm = (c.get("name") or "").strip()
+        if sk and c.get("active", True):
+            out.append((sk, nm or sk))
+    return sorted(set(out), key=lambda x: x[1].lower())
+
+
+def create_product(base_url, username, password, *, client_id, organization,
+                   search_key, name, product_category, tax_category, uom,
+                   description="", sold=True, purchased=False, stocked=True,
+                   product_type="I"):
+    """Cree un produit via POST ImportService/Product (import ASYNCHRONE).
+
+    Les references (client, organization, productCategory, taxCategory, uom)
+    sont envoyees par searchKey/nom (l'API accepte la chaine). Renvoie un dict
+    normalise : {ok: bool, status: int, request_id: str|None, errors: list,
+    raw: ...}. Ne leve jamais (erreurs capturees pour affichage UI).
+
+    IMPORTANT : ecriture reelle dans Openbravo. L'appelant DOIT confirmer avant.
+    """
+    endpoint = f"{base_url}/org.openbravo.api.ImportService/Product"
+    item = {
+        "client": client_id,
+        "organization": organization,
+        "searchKey": search_key,
+        "name": name,
+        "productCategory": product_category,
+        "taxCategory": tax_category,
+        "uom": uom,
+        "description": description,
+        "active": True,
+        "sold": bool(sold),
+        "purchased": bool(purchased),
+        "stocked": bool(stocked),
+        "productType": product_type,
+    }
+    payload = [item]  # l'endpoint attend un TABLEAU de Product_Import
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    _log_api_response("create_product_payload", endpoint, {}, payload)
+    try:
+        session = _create_http_session()
+        resp = session.post(endpoint, json=payload, headers=headers,
+                            auth=(username, password), timeout=30)
+        try:
+            body = resp.json()
+        except Exception:
+            body = {"raw_text": resp.text[:1000]}
+        _log_api_response("create_product_response", endpoint, {}, body)
+        if resp.status_code in (200, 201, 202):
+            req_id = (((body or {}).get("data") or {}).get("request") or {}).get("id")
+            return {"ok": True, "status": resp.status_code,
+                    "request_id": req_id, "errors": [], "raw": body}
+        # Erreur : extraire errors[]
+        errs = (body or {}).get("errors") or []
+        return {"ok": False, "status": resp.status_code, "request_id": None,
+                "errors": errs, "raw": body}
+    except Exception as e:
+        logger.exception("create_product a echoue")
+        return {"ok": False, "status": -1, "request_id": None,
+                "errors": [{"title": str(e)}], "raw": None}
+
+
 def _extract_bp_name(order: dict) -> str:
     bp = order.get("businessPartner", "")
     if isinstance(bp, dict):

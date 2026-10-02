@@ -95,7 +95,7 @@ if is_persist_log():
 
 st.title("\U0001f4ca " + t("app_title", lang))
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "\U0001f4b6 " + t("tabs_takings", lang),
     "\U0001f465 " + t("tabs_clients", lang),
     "\U0001f381 " + t("tabs_giftcards", lang),
@@ -106,13 +106,14 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "\U0001f4c8 " + t("tabs_trends", lang),
     "\U0001f9d1\u200d\U0001f4bc " + t("tabs_sellers", lang),
     "\U0001f9ee " + t("tabs_promo_sim", lang),
-    "\u2699\ufe0f " + t("tabs_config", lang)])
+    "\u2699\ufe0f " + t("tabs_config", lang),
+    "\U0001f4e6 " + t("pc_title", lang)])
 
 # Si aucun client configure pour cet utilisateur : les onglets de donnees
 # ne peuvent pas charger. On affiche un message d'invite dans le 1er onglet et
 # on NE rend que l'onglet Configuration (tab11).
 if base_url is None:
-    for _tb in (tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10):
+    for _tb in (tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12):
         with _tb:
             st.info(t("cfg_none", lang) + "  \u2192  \u2699\ufe0f " + t("tabs_config", lang))
     from tab_config import render_config
@@ -212,6 +213,16 @@ with tab10:
 from tab_config import render_config
 with tab11:
     render_config(user_id=_uid, role=_user.get("role", "user"), lang=lang)
+
+
+# Onglet 12 - Creation de produit
+from tab_product_create import render_product_create
+with tab12:
+    render_product_create(
+        base_url=base_url, username=username, password=PW_VALUE,
+        client_id=client_name, selected_store=selected_store,
+        env="production", lang=lang,
+    )
 
 
 # ==========================================
