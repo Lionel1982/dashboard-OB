@@ -30,7 +30,7 @@ def render_coupons(*, base_url, username, password, selected_date, lang="fr"):
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary", key="btn_refresh_coupon")
 
     raw = load_tab_data(cache_key, lambda: fetch_coupons(base_url, username, password),
-                        t("coupon_analysis", lang), force=force, db_keys=["coupons"])
+                        t("coupon_analysis", lang), force=force, db_keys=["coupons"], prod_confirm=True)
     if raw is NOT_LOADED:
         return
 

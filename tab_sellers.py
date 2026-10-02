@@ -29,7 +29,7 @@ def render_sellers(*, base_url, username, password, selected_store,
     st.caption(t("sellers_rule_hint", lang))
     date_str = selected_date.strftime("%Y-%m-%d")
 
-    cache_key = f"sellers_{selected_store}_{date_str}"
+    cache_key = f"orders|{selected_store}|{date_str}"
     col_refresh, _ = st.columns([1, 5])
     with col_refresh:
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary",

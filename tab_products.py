@@ -25,7 +25,7 @@ def render_products(*, base_url, username, password, selected_store,
     st.subheader("\U0001f4e6 " + t("prod_analysis", lang))
     date_str = selected_date.strftime("%Y-%m-%d")
 
-    cache_key = f"prod_orders_{selected_store}_{date_str}"
+    cache_key = f"orders|{selected_store}|{date_str}"
     col_refresh, _ = st.columns([1, 5])
     with col_refresh:
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary", key="btn_refresh_prod")

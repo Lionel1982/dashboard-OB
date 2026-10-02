@@ -47,7 +47,7 @@ NOT_LOADED = object()
 
 def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
                   db_keys: list = None, require_click: bool = True,
-                  load_label: str = None):
+                  load_label: str = None, prod_confirm: bool = False):
     """Charge des donnees pour un onglet avec cache session + GROS indicateur.
 
     - cache_key : cle unique en st.session_state (persiste entre navigations).
@@ -86,12 +86,26 @@ def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
     if require_click and loaded_flag not in st.session_state and cache_key not in st.session_state:
         _lang = st.session_state.get("_lang", "fr")
         btn_label = load_label or t("load_data", _lang)
-        if st.button("\U0001f4e5 " + btn_label, type="primary",
-                     key=f"load_btn_{cache_key}"):
+        # Alerte production : pour une base GLOBALE (non datee) en environnement
+        # de production, exiger une confirmation explicite avant le call (ces
+        # chargements sont volumineux et taxent l'API de prod).
+        _env = (st.session_state.get("_env") or "").lower()
+        _needs_confirm = prod_confirm and _env.startswith("prod")
+        if _needs_confirm:
+            _confirmed = st.checkbox(t("prod_confirm_check", _lang),
+                                     key=f"prodconfirm_{cache_key}")
+            if not _confirmed:
+                st.warning("\u26a0\ufe0f " + t("prod_confirm_warn", _lang))
+        else:
+            _confirmed = True
+        _can_load = st.button("\U0001f4e5 " + btn_label, type="primary",
+                              key=f"load_btn_{cache_key}", disabled=not _confirmed)
+        if _can_load and _confirmed:
             st.session_state[loaded_flag] = True
             # on continue le chargement ci-dessous (pas de return)
         else:
-            st.caption(t("load_hint", _lang))
+            if not _needs_confirm:
+                st.caption(t("load_hint", _lang))
             return NOT_LOADED
 
     if cache_key not in st.session_state:

@@ -47,7 +47,13 @@ def render_config(*, user_id, role="user", lang="fr"):
         for nm in names:
             c = by_name[nm]
             is_active = (nm == active)
-            with st.expander(("\u2b50 " if is_active else "") + nm, expanded=False):
+            _env = (c.get("env") or "production").lower()
+            _env_badge = {"production": "\U0001f7e3 production",
+                          "preproduction": "\U0001f535 preproduction",
+                          "test": "\U0001f535 test"}.get(_env, _env)
+            with st.expander(("\u2b50 " if is_active else "") + nm + f"  \u2014 {_env_badge}",
+                             expanded=False):
+                st.write(f"**{t('cfg_env', lang)}** : {_env_badge}")
                 st.write(f"**{t('cfg_endpoint', lang)}** : `{c.get('endpoint','')}`")
                 st.write(f"**{t('cfg_username', lang)}** : `{c.get('api_username','')}`")
                 stores = c.get("stores", []) or []
@@ -97,6 +103,9 @@ def render_config(*, user_id, role="user", lang="fr"):
         username = st.text_input(t("cfg_username", lang), key="cfg_new_user",
                                  placeholder="xxx-api")
         pwd = st.text_input(t("cfg_pw", lang), type="password", key="cfg_new_pw")
+        env = st.selectbox(t("cfg_env", lang),
+                           ["production", "preproduction", "test"],
+                           key="cfg_new_env", help=t("cfg_env_help", lang))
         submitted = st.form_submit_button("\U0001f4be " + t("cfg_save", lang),
                                           type="primary")
         if submitted:
@@ -113,7 +122,8 @@ def render_config(*, user_id, role="user", lang="fr"):
                 else:
                     enc = crypto.encrypt_secret("")
                 db.upsert_client_config(user_id, nm, endpoint, username, enc,
-                                        stores=(existing or {}).get("stores", []))
+                                        stores=(existing or {}).get("stores", []),
+                                        env=env)
                 st.success(t("cfg_saved", lang).format(name=nm))
                 # Charger les magasins dans la foulee (1 appel)
                 pw_clair = crypto.decrypt_secret(enc)

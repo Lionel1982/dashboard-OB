@@ -38,7 +38,7 @@ def render_giftcards(*, base_url, username, password, selected_date, lang="fr"):
         return {"gc": fetch_gift_cards(base_url, username, password),
                 "txn": fetch_gift_card_transactions(base_url, username, password)}
     cached = load_tab_data(cache_key, _load, t("gc_analysis", lang), force=force,
-                           db_keys=["gift_cards", "gift_card_transactions"])
+                           db_keys=["gift_cards", "gift_card_transactions"], prod_confirm=True)
     if cached is NOT_LOADED:
         return
     raw_gc, raw_txn = cached["gc"], cached["txn"]

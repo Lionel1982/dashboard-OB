@@ -88,14 +88,20 @@ def list_client_configs(user_id: int):
 
 def upsert_client_config(user_id: int, name: str, endpoint: str,
                          api_username: str, api_password_encrypted: str,
-                         stores=None):
-    """Ajoute ou met a jour une config client (unique par (user_id, name))."""
+                         stores=None, env="production"):
+    """Ajoute ou met a jour une config client (unique par (user_id, name)).
+
+    env : type d'environnement du client ('production', 'preproduction',
+    'test'). Sert a adapter l'UI (couleur du selecteur) et a declencher
+    l'alerte de confirmation avant un call sur base globale en production.
+    """
     try:
         payload = {
             "user_id": user_id, "name": name, "endpoint": endpoint,
             "api_username": api_username,
             "api_password_encrypted": api_password_encrypted,
             "stores": stores or [],
+            "env": env or "production",
         }
         res = (get_client().table("client_configs")
                .upsert(payload, on_conflict="user_id,name").execute())

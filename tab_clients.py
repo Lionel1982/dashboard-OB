@@ -49,7 +49,7 @@ def render_clients(*, base_url, username, password, client_name,
             "orders": fetch_orders(base_url, username, password, selected_store, date_str),
         }
     cached = load_tab_data(cache_key, _load, t("spinner_clients", lang), force=force,
-                           db_keys=["business_partners"])
+                           db_keys=["business_partners"], prod_confirm=True)
     if cached is NOT_LOADED:
         return
     raw_all_bps = cached["bps"]

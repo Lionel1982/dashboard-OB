@@ -26,7 +26,7 @@ def render_promotions(*, base_url, username, password, selected_store,
     date_str = selected_date.strftime("%Y-%m-%d")
     st.caption(t("promo_hint", lang).format(s=selected_store, d=selected_date.strftime("%d/%m/%Y")))
 
-    cache_key = f"promo_orders_{selected_store}_{date_str}"
+    cache_key = f"orders|{selected_store}|{date_str}"
     col_refresh, _ = st.columns([1, 5])
     with col_refresh:
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary", key="btn_refresh_promo")

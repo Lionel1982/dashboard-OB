@@ -60,12 +60,29 @@ if _names:
     PW_VALUE = _crypto.decrypt_secret(_c.get("api_password_encrypted", ""))
     client_name = _chosen
     store_list = _c.get("stores", []) or DEFAULT_STORES
+    client_env = (_c.get("env") or "production").lower()
+    st.session_state["_env"] = client_env  # pour load_tab_data (alerte prod)
+
+    # Couleur du selecteur de client selon l'environnement :
+    #  production -> violet pale (prudence) ; preprod/test -> bleu.
+    _env_is_prod = client_env.startswith("prod")
+    _sel_bg = "#ede7f6" if _env_is_prod else "#e3f2fd"
+    _sel_border = "#9575cd" if _env_is_prod else "#42a5f5"
+    _css = (
+        "<style>"
+        'div[data-testid="stSidebar"] div[data-baseweb="select"] > div {'
+        "background-color: " + _sel_bg + "; border: 1px solid " + _sel_border + ";}"
+        "</style>"
+    )
+    st.markdown(_css, unsafe_allow_html=True)
 else:
     # Aucun client pour cet utilisateur : l'inviter a en creer un.
     st.sidebar.info(t("cfg_select_client", lang) + " : \u2014")
     st.info(t("cfg_none", "fr") + "  \u2192  " + t("tabs_config", "fr"))
     base_url = username = PW_VALUE = client_name = None
     store_list = []
+    client_env = None
+    st.session_state["_env"] = ""
 
 # ==========================================
 # SIDEBAR
@@ -93,7 +110,16 @@ amount_type = "Montant Brut" if amount_label == t("amount_gross", lang) else "Mo
 if is_persist_log():
     st.sidebar.info("\U0001f41e " + t("super_debug", lang))
 
-st.title("\U0001f4ca " + t("app_title", lang))
+# Titre dynamique : reprend le nom du client en cours (+ badge environnement).
+if client_name:
+    _env_tag = ""
+    if client_env:
+        _emoji = "\U0001f7e3" if client_env.startswith("prod") else "\U0001f535"
+        _env_tag = f"  {_emoji} {client_env}"
+    st.title(f"\U0001f4ca {client_name}{_env_tag}")
+    st.caption(t("app_title", lang))
+else:
+    st.title("\U0001f4ca " + t("app_title", lang))
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "\U0001f4b6 " + t("tabs_takings", lang),
