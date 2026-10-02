@@ -339,13 +339,19 @@ def fetch_organizations(base_url, username, password, client_name=""):
 
 
 def parse_organizations(orgs_json: str) -> list:
-    """Extrait la liste des magasins (name) exploitables depuis la reponse
-    Organization. Ignore les organisations techniques (sans searchKey/name, ou
-    marquees comme non-magasin). Renvoie une liste de noms triee, dedupliquee.
+    """Extrait la liste des MAGASINS (type generic / point de vente) depuis la
+    reponse Organization. Renvoie une liste de noms triee, dedupliquee.
 
-    On garde large : toute org ayant un 'name' non vide est candidate. Les
-    installs Openbravo exposent typiquement l'org racine + les magasins ; on
-    renvoie tout 'name' non vide, a l'utilisateur de choisir dans le selecteur.
+    PROBLEME : l'endpoint ExportService Organization n'expose PAS le champ
+    organizationType (ni racine, ni organization_info). On ne peut donc pas
+    filtrer directement sur 'generic'.
+
+    DISCRIMINANT (valide sur donnees reelles) : un vrai magasin (generic, avec
+    un point de vente) porte des champs lies a l'ouverture/activite du PoS que
+    les organisations techniques (centrale, pays, '*', franchise...) n'ont pas :
+      - lastTouchPointStoreOpening / lastTouchPointTypeStoreOpening (ex. "Physical PoS")
+      - lastBusinessDate
+    On ne garde donc que les orgs presentant au moins un de ces marqueurs.
     """
     try:
         orgs = json.loads(orgs_json)
@@ -354,7 +360,15 @@ def parse_organizations(orgs_json: str) -> list:
     names = []
     for o in orgs or []:
         nm = (o.get("name") or "").strip()
-        if nm:
+        if not nm:
+            continue
+        # Marqueurs "a un point de vente" => magasin exploitable (generic)
+        has_pos = bool(
+            o.get("lastTouchPointStoreOpening")
+            or o.get("lastTouchPointTypeStoreOpening")
+            or o.get("lastBusinessDate")
+        )
+        if has_pos:
             names.append(nm)
     # dedupe en conservant un tri alphabetique stable
     return sorted(set(names))
@@ -390,14 +404,21 @@ def parse_orders(orders_json: str) -> pd.DataFrame:
         bp_name = _extract_bp_name(o)
         bp_id = _extract_bp_id(o)
         gross = float(o.get("grossAmount", 0))
+        # Moyens de paiement : TOUJOURS descendre au DETAIL (payments[]), qui
+        # liste chaque reglement (gere nativement le multi-paiement). Le bon
+        # champ est 'name' (ex. "Credit Card Manual", "Cash") ; 'paymentType' et
+        # 'paymentMethod.description' sont vides sur cette install -> d'ou l'ancien
+        # "Inconnu". On garde chaque reglement (y compris doublons de name) pour
+        # refleter le detail reel.
         payment_types = []
-        for p in o.get("payments", []):
-            ptype = p.get("paymentType")
+        for p in o.get("payments", []) or []:
+            nm = (p.get("name")
+                  or p.get("paymentType"))
             pm = p.get("paymentMethod")
-            if isinstance(pm, dict) and pm.get("description"):
-                ptype = pm["description"]
-            if ptype:
-                payment_types.append(ptype)
+            if not nm and isinstance(pm, dict):
+                nm = pm.get("description") or pm.get("name")
+            if nm:
+                payment_types.append(nm)
         # #4 : un ticket a exactement 0 EUR est anormal → on le signale.
         if gross == 0:
             logger.warning("Ticket a 0 EUR (montant brut nul) : %s",

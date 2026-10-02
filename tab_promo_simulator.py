@@ -280,11 +280,15 @@ def render_promo_simulator(*, base_url, username, password, selected_store,
         state_key = f"psim_day_{selected_store}_{date_str}"
 
         if load:
-            cache_key = f"promo_orders_{selected_store}_{date_str}"
+            cache_key = f"psim_promo_orders_{selected_store}_{date_str}"
+            # require_click=False : le clic est deja gere par le bouton
+            # "Charger les tickets du jour" ci-dessus -> load_tab_data charge
+            # directement (sinon il renvoie NOT_LOADED, non serialisable).
             raw = load_tab_data(
                 cache_key,
                 lambda: fetch_orders(base_url, username, password, selected_store, date_str),
                 t("psim_load_day", lang),
+                require_click=False,
             )
             st.session_state[state_key] = raw
 

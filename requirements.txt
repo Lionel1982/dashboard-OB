@@ -7,3 +7,6 @@ kaleido>=0.2.1
 urllib3>=2.0.0
 openpyxl>=3.1.0
 streamlit-aggrid>=1.0.5
+supabase>=2.0.0
+bcrypt>=4.0.0
+cryptography>=42.0.0

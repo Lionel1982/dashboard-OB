@@ -22,44 +22,50 @@ if "_cache_db_init" not in st.session_state:
     db_cache.init_db()
     st.session_state["_cache_db_init"] = True
 
-import clients_config as cc
+# ============================================================
+#  AUTHENTIFICATION (etape 1 multi-utilisateurs)
+#  Ecran de login BLOQUANT : rien ne s'affiche tant que l'utilisateur n'est
+#  pas connecte. Les comptes sont crees par l'admin (script create_admin.py).
+# ============================================================
+import auth
+_user = auth.require_login()   # -> stoppe le rendu si non connecte
+# Bandeau utilisateur + deconnexion dans la sidebar
+with st.sidebar:
+    _c1, _c2 = st.columns([3, 1])
+    _c1.caption(f"\U0001f464 **{_user['username']}**"
+                + ("  \u2022 admin" if _user.get("role") == "admin" else ""))
+    if _c2.button("\u23fb", help="Se deconnecter", key="btn_logout"):
+        auth.logout()
+        st.rerun()
 
-# ---- Multi-client : charge la liste des clients (migre config.json si besoin) ----
-_clients = st.session_state.get("clients_data") or cc.load_clients()
-st.session_state["clients_data"] = _clients
-_client_names = cc.list_client_names(_clients)
+import db as _db
+import crypto as _crypto
 
-# Selecteur de client en HAUT de la sidebar (avant tout le reste).
-if _client_names:
-    _active = cc.get_active_client_name(_clients)
-    _idx = _client_names.index(_active) if _active in _client_names else 0
+# ---- Multi-client (Supabase) : clients PRIVES de l'utilisateur connecte ----
+_uid = _user["id"]
+_configs = _db.list_client_configs(_uid)
+_names = sorted(c["name"] for c in _configs)
+_by_name = {c["name"]: c for c in _configs}
+
+if _names:
+    _akey = f"active_client_{_uid}"
+    _active = st.session_state.get(_akey)
+    _idx = _names.index(_active) if _active in _names else 0
     _chosen = st.sidebar.selectbox("\U0001f3e2 " + t("cfg_select_client", "fr"),
-                                   _client_names, index=_idx, key="client_selector")
-    if _chosen != _active:
-        _clients = cc.set_active_client(_clients, _chosen)
-        st.session_state["clients_data"] = _clients
-    _cfg = cc.get_client(_clients, _chosen)
+                                   _names, index=_idx, key="client_selector")
+    st.session_state[_akey] = _chosen
+    _c = _by_name[_chosen]
+    base_url = (_c.get("endpoint", "") or "").rstrip("/")
+    username = _c.get("api_username", "")
+    PW_VALUE = _crypto.decrypt_secret(_c.get("api_password_encrypted", ""))
+    client_name = _chosen
+    store_list = _c.get("stores", []) or DEFAULT_STORES
 else:
-    # Aucun client : fallback sur l'ancienne config (st.secrets / config.json)
-    _cfg = None
-
-# Fallback retrocompatible si pas de multi-client configure
-if _cfg:
-    base_url = _cfg["endpoint"]
-    username = _cfg["username"]
-    PW_VALUE = _cfg["password"]
-    client_name = _cfg["name"]
-    store_list = _cfg["stores"] or DEFAULT_STORES
-else:
-    config = load_config()
-    if not config:
-        st.info("Aucun client configure. Ouvrez l'onglet Configuration pour en ajouter un.")
-        st.stop()
-    base_url = config["endpoint"].rstrip("/")
-    username = config["username"]
-    PW_VALUE = config["password"]
-    client_name = config.get("client", DEFAULT_CLIENT)
-    store_list = config.get("stores", DEFAULT_STORES)
+    # Aucun client pour cet utilisateur : l'inviter a en creer un.
+    st.sidebar.info(t("cfg_select_client", lang) + " : \u2014")
+    st.info(t("cfg_none", "fr") + "  \u2192  " + t("tabs_config", "fr"))
+    base_url = username = PW_VALUE = client_name = None
+    store_list = []
 
 # ==========================================
 # SIDEBAR
@@ -82,10 +88,8 @@ amount_label = st.sidebar.radio(t("amount", lang) + " :",
                                 [t("amount_gross", lang), t("amount_net", lang)])
 # Mapping libelle traduit -> valeur interne stable ('Montant Brut'/'Montant Net')
 amount_type = "Montant Brut" if amount_label == t("amount_gross", lang) else "Montant Net"
-split_pos_neg = st.sidebar.checkbox(t("split_sales_returns", lang), value=False)
-selected_bucket = st.sidebar.selectbox(t("bucket", lang) + " :",
-                                       list(TIME_BUCKET_MAP.keys()), index=2)
-freq = TIME_BUCKET_MAP[selected_bucket]
+# NB : le decoupage horaire (bucket) et 'Separer Ventes/Retours' ne concernent
+# QUE l'onglet Encaissements -> deplaces dans cet onglet (plus dans la sidebar).
 if is_persist_log():
     st.sidebar.info("\U0001f41e " + t("super_debug", lang))
 
@@ -104,14 +108,25 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "\U0001f9ee " + t("tabs_promo_sim", lang),
     "\u2699\ufe0f " + t("tabs_config", lang)])
 
+# Si aucun client configure pour cet utilisateur : les onglets de donnees
+# ne peuvent pas charger. On affiche un message d'invite dans le 1er onglet et
+# on NE rend que l'onglet Configuration (tab11).
+if base_url is None:
+    for _tb in (tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10):
+        with _tb:
+            st.info(t("cfg_none", lang) + "  \u2192  \u2699\ufe0f " + t("tabs_config", lang))
+    from tab_config import render_config
+    with tab11:
+        render_config(user_id=_uid, lang=lang)
+    st.stop()
+
 # Onglet 1
 from tab_encaissements import render_encaissements
 with tab1:
     render_encaissements(
         base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
-        amount_type=amount_type, split_pos_neg=split_pos_neg,
-        selected_bucket=selected_bucket, freq=freq, lang=lang,
+        amount_type=amount_type, lang=lang,
     )
 
 # Onglet 2
@@ -190,13 +205,13 @@ with tab10:
     render_promo_simulator(
         base_url=base_url, username=username, password=PW_VALUE,
         selected_store=selected_store, selected_date=selected_date,
-        config=(_cfg or {}), lang=lang,
+        config={}, lang=lang,
     )
 
 # Onglet 11 - Configuration (multi-client / multi-magasin)
 from tab_config import render_config
 with tab11:
-    render_config(lang=lang)
+    render_config(user_id=_uid, lang=lang)
 
 
 # ==========================================

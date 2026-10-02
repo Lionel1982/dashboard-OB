@@ -14,23 +14,23 @@ from utils import (
     fetch_orders, parse_orders, compute_order_stats,
     generate_hourly_chart, generate_payment_pie,
     generate_basket_by_items_chart, df_to_csv_bytes,
-    JOURS_FR,
+    JOURS_FR, TIME_BUCKET_MAP,
 )
 from i18n import t
 
+# AgGrid : tableau interactif (tri au clic, filtres par colonne, redimension).
+# Import conditionnel -> fallback st.dataframe si le paquet n'est pas installe.
+try:
+    from st_aggrid import AgGrid, GridOptionsBuilder
+    _HAS_AGGRID = True
+except Exception:
+    _HAS_AGGRID = False
+
 
 def render_encaissements(*, base_url, username, password, selected_store,
-                         selected_date, amount_type, split_pos_neg,
-                         selected_bucket, freq, lang="fr"):
-    """Onglet 1 — Encaissements. Chargement automatique."""
+                         selected_date, amount_type, lang="fr"):
+    """Onglet 1 — Encaissements. Chargement a la demande (bouton)."""
     from datetime import timedelta
-
-    # Switch rapide Veille / Jour : bascule la date de toute la page.
-    period = st.radio(t("period", lang) + " :",
-                      [t("day", lang), t("yesterday", lang)],
-                      horizontal=True, key="period_enc")
-    if period == t("yesterday", lang):
-        selected_date = selected_date - timedelta(days=1)
 
     date_str = selected_date.strftime("%Y-%m-%d")
 
@@ -56,13 +56,18 @@ def render_encaissements(*, base_url, username, password, selected_store,
         st.warning(t("cannot_extract", lang))
         return
 
-    # ── Filtres sidebar ──
-    st.sidebar.divider()
-    st.sidebar.header("🎯 " + t("filters_takings", lang))
+    # ── Filtres EN HAUT de l'onglet (deplaces de la sidebar : specifiques aux
+    #    Encaissements). Terminaux + moyens de paiement.
+    st.markdown("#### \U0001f3af " + t("filters_takings", lang))
+    fcol1, fcol2 = st.columns(2)
     all_terminals = sorted(df_raw["Terminal"].unique().tolist())
-    sel_terminals = st.sidebar.multiselect(t("terminals", lang) + " :", all_terminals, default=all_terminals)
     all_payments = sorted({p for sub in df_raw["Paiements"] for p in sub})
-    sel_payments = st.sidebar.multiselect(t("payments", lang) + " :", all_payments, default=all_payments)
+    with fcol1:
+        sel_terminals = st.multiselect(t("terminals", lang) + " :", all_terminals,
+                                       default=all_terminals, key="enc_f_terminals")
+    with fcol2:
+        sel_payments = st.multiselect(t("payments", lang) + " :", all_payments,
+                                      default=all_payments, key="enc_f_payments")
 
     df_f = df_raw[df_raw["Terminal"].isin(sel_terminals)].copy()
     df_f = df_f[df_f["Paiements"].apply(lambda x: any(i in sel_payments for i in x))]
@@ -110,6 +115,21 @@ def render_encaissements(*, base_url, username, password, selected_store,
     )
 
     st.divider()
+
+    # ── Contrôles d'affichage SPÉCIFIQUES à cet onglet (découpage horaire +
+    #    séparation ventes/retours). Déplacés depuis la sidebar : ils ne
+    #    concernent que le graphique horaire des Encaissements.
+    ctrl1, ctrl2 = st.columns([2, 2])
+    with ctrl1:
+        selected_bucket = st.selectbox(
+            t("bucket", lang) + " :", list(TIME_BUCKET_MAP.keys()),
+            index=2, key="enc_bucket")
+        freq = TIME_BUCKET_MAP[selected_bucket]
+    with ctrl2:
+        st.write("")
+        st.write("")
+        split_pos_neg = st.checkbox(t("split_sales_returns", lang),
+                                    value=False, key="enc_split")
 
     # ── Graphique horaire ──
     st.subheader(f"📈 {t('detail_of', lang)} {selected_date.strftime('%d/%m/%Y')}")
@@ -168,9 +188,26 @@ def render_encaissements(*, base_url, username, password, selected_store,
                .rename(columns=rename_map)
                .sort_values("Heure", ascending=False)
                .reset_index(drop=True))
-    st.dataframe(df_disp, use_container_width=True, hide_index=True)
+
+    # Tableau dynamique AgGrid : tri au clic + filtres par colonne + resize.
+    # Fallback st.dataframe si AgGrid non installe (pas de crash).
+    if _HAS_AGGRID:
+        gb = GridOptionsBuilder.from_dataframe(df_disp)
+        gb.configure_default_column(sortable=True, filter=True, resizable=True)
+        gb.configure_column("Montant Brut", type=["numericColumn"],
+                            valueFormatter="x.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac'")
+        gb.configure_column("Montant Net", type=["numericColumn"],
+                            valueFormatter="x.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac'")
+        gb.configure_column("Nb Articles", type=["numericColumn"])
+        AgGrid(df_disp, gridOptions=gb.build(),
+               fit_columns_on_grid_load=True, allow_unsafe_jscode=True,
+               theme="streamlit", height=420, key="enc_orders_grid")
+    else:
+        st.caption("\u2139\ufe0f " + t("aggrid_missing_short", lang))
+        st.dataframe(df_disp, use_container_width=True, hide_index=True)
+
     st.download_button(
-        "📥 CSV", df_to_csv_bytes(df_disp),
+        "\U0001f4e5 CSV", df_to_csv_bytes(df_disp),
         f"Commandes_{selected_store}_{date_str}.csv", "text/csv")
 
     # ══════════════════════════════════════
