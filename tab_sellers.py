@@ -38,7 +38,7 @@ def render_sellers(*, base_url, username, password, selected_store,
     raw = load_tab_data(
         cache_key,
         lambda: fetch_orders(base_url, username, password, selected_store, date_str),
-        t("sellers_analysis", lang), force=force)
+        t("sellers_analysis", lang), force=force, widget_suffix="sellers")
     if raw is NOT_LOADED:
         return
 

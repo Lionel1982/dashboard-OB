@@ -31,7 +31,7 @@ def render_promotions(*, base_url, username, password, selected_store,
     with col_refresh:
         force = st.button("\U0001f504 " + t("refresh", lang), type="secondary", key="btn_refresh_promo")
 
-    raw = load_tab_data(cache_key, lambda: fetch_orders(base_url, username, password, selected_store, date_str), t("promo_analysis", lang), force=force)
+    raw = load_tab_data(cache_key, lambda: fetch_orders(base_url, username, password, selected_store, date_str), t("promo_analysis", lang), force=force, widget_suffix="promo")
     if raw is NOT_LOADED:
         return
 

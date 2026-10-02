@@ -43,7 +43,7 @@ def render_encaissements(*, base_url, username, password, selected_store,
     raw_orders = load_tab_data(
         cache_key,
         lambda: fetch_orders(base_url, username, password, selected_store, date_str),
-        t("tabs_takings", lang), force=force)
+        t("tabs_takings", lang), force=force, widget_suffix="enc")
     if raw_orders is NOT_LOADED:
         return
 

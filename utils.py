@@ -47,7 +47,8 @@ NOT_LOADED = object()
 
 def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
                   db_keys: list = None, require_click: bool = True,
-                  load_label: str = None, prod_confirm: bool = False):
+                  load_label: str = None, prod_confirm: bool = False,
+                  widget_suffix: str = ""):
     """Charge des donnees pour un onglet avec cache session + GROS indicateur.
 
     - cache_key : cle unique en st.session_state (persiste entre navigations).
@@ -69,6 +70,10 @@ def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
     # Marqueur "deja charge au moins une fois" (persiste tant que l'onglet
     # reste en session). Le force (Rafraichir) ne reinitialise pas ce marqueur.
     loaded_flag = f"{cache_key}__loaded"
+    # Cle de WIDGET unique par onglet (cache_key peut etre PARTAGEE entre onglets
+    # pour mutualiser le cache session des orders ; mais les widgets Streamlit
+    # doivent avoir une cle unique -> on suffixe par widget_suffix).
+    _wkey = f"{cache_key}|{widget_suffix}" if widget_suffix else cache_key
 
     if force:
         if cache_key in st.session_state:
@@ -93,13 +98,13 @@ def load_tab_data(cache_key: str, loader, label: str, force: bool = False,
         _needs_confirm = prod_confirm and _env.startswith("prod")
         if _needs_confirm:
             _confirmed = st.checkbox(t("prod_confirm_check", _lang),
-                                     key=f"prodconfirm_{cache_key}")
+                                     key=f"prodconfirm_{_wkey}")
             if not _confirmed:
                 st.warning("\u26a0\ufe0f " + t("prod_confirm_warn", _lang))
         else:
             _confirmed = True
         _can_load = st.button("\U0001f4e5 " + btn_label, type="primary",
-                              key=f"load_btn_{cache_key}", disabled=not _confirmed)
+                              key=f"load_btn_{_wkey}", disabled=not _confirmed)
         if _can_load and _confirmed:
             st.session_state[loaded_flag] = True
             # on continue le chargement ci-dessous (pas de return)
