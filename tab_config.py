@@ -15,6 +15,7 @@ import streamlit as st
 
 import db
 import crypto
+import auth
 from utils import fetch_organizations, parse_organizations
 import db_cache
 from i18n import t
@@ -29,7 +30,7 @@ def _set_active(user_id, name):
     st.session_state[f"active_client_{user_id}"] = name
 
 
-def render_config(*, user_id, lang="fr"):
+def render_config(*, user_id, role="user", lang="fr"):
     st.subheader("\u2699\ufe0f " + t("cfg_title", lang))
     st.caption(t("cfg_intro", lang))
 
@@ -126,3 +127,50 @@ def render_config(*, user_id, lang="fr"):
                 if not _active_name(user_id):
                     _set_active(user_id, nm)
                 st.rerun()
+
+
+    # ============================================================
+    #  GESTION DES COMPTES (ADMIN UNIQUEMENT)
+    # ============================================================
+    if role == "admin":
+        st.divider()
+        st.markdown("### \U0001f465 " + t("cfg_accounts", lang))
+        st.caption(t("cfg_accounts_intro", lang))
+
+        # --- Creer un compte ---
+        with st.form("cfg_create_account", clear_on_submit=True):
+            new_user = st.text_input(t("cfg_acc_username", lang), key="cfg_acc_user")
+            new_pw = st.text_input(t("cfg_acc_pw", lang), type="password", key="cfg_acc_pw")
+            new_pw2 = st.text_input(t("cfg_acc_pw2", lang), type="password", key="cfg_acc_pw2")
+            new_role = st.selectbox(t("cfg_acc_role", lang), ["user", "admin"],
+                                    key="cfg_acc_role")
+            create = st.form_submit_button("\U0001f4be " + t("cfg_acc_create", lang),
+                                           type="primary")
+            if create:
+                if not (new_user or "").strip() or not new_pw:
+                    st.error(t("cfg_acc_missing", lang))
+                elif new_pw != new_pw2:
+                    st.error(t("cfg_acc_pw_mismatch", lang))
+                elif db.get_user_by_username(new_user.strip()):
+                    st.error(t("cfg_acc_exists", lang).format(name=new_user.strip()))
+                else:
+                    h = auth.hash_password(new_pw)
+                    row = db.create_user(new_user.strip(), h, role=new_role)
+                    if row:
+                        st.success(t("cfg_acc_created", lang).format(
+                            name=new_user.strip(), role=new_role))
+                        st.rerun()
+                    else:
+                        st.error(t("cfg_acc_fail", lang))
+
+        # --- Liste des comptes existants ---
+        users = db.list_users()
+        if users:
+            st.caption(t("cfg_acc_existing", lang))
+            st.dataframe(
+                [{"id": u["id"], t("cfg_acc_username", lang): u["username"],
+                  t("cfg_acc_role", lang): u.get("role", "user"),
+                  t("cfg_acc_created", lang).split("{")[0].strip() or "cree":
+                      (u.get("created_at", "") or "")[:19]}
+                 for u in users],
+                use_container_width=True, hide_index=True)

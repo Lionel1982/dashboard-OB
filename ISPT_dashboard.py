@@ -117,7 +117,7 @@ if base_url is None:
             st.info(t("cfg_none", lang) + "  \u2192  \u2699\ufe0f " + t("tabs_config", lang))
     from tab_config import render_config
     with tab11:
-        render_config(user_id=_uid, lang=lang)
+        render_config(user_id=_uid, role=_user.get("role", "user"), lang=lang)
     st.stop()
 
 # Onglet 1
@@ -211,7 +211,7 @@ with tab10:
 # Onglet 11 - Configuration (multi-client / multi-magasin)
 from tab_config import render_config
 with tab11:
-    render_config(user_id=_uid, lang=lang)
+    render_config(user_id=_uid, role=_user.get("role", "user"), lang=lang)
 
 
 # ==========================================
