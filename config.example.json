@@ -1,0 +1,7 @@
+{
+    "endpoint": "https://intersport.cloud.openbravo.com/openbravo/ws",
+    "username": "VOTRE_UTILISATEUR_API",
+    "password": "VOTRE_MOT_DE_PASSE_API",
+    "organization_id": "PT0001",
+    "client_id": "Intersport"
+}

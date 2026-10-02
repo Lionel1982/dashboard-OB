@@ -1,0 +1,41 @@
+# ============================================
+#  SECRETS — NE JAMAIS COMMITER
+# ============================================
+config.json
+compta_config.json
+.streamlit/secrets.toml
+
+# ============================================
+#  Environnement virtuel : NE JAMAIS transferer entre machines
+# ============================================
+venv/
+.venv/
+venv/.machine_stamp
+
+# Caches Python
+__pycache__/
+*.pyc
+
+# ============================================
+#  Caches SQLite locaux (API) — propres a chaque machine
+# ============================================
+*_cache.db
+*_cache.db-wal
+*_cache.db-shm
+api_cache.db
+api_cache.db-wal
+api_cache.db-shm
+
+# ============================================
+#  Logs, payloads de debug, sauvegardes, archives
+# ============================================
+api_logs/
+debug_payloads/
+_backups/
+*.zip
+
+# Dossier d'extraction du zip v(2) (nom avec espace et parenthese)
+dashboard-openbravo (2)/
+
+# Fichiers temporaires LibreOffice
+.~lock.*#
